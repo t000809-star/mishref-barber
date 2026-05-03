@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import type { Booking, BookingStatus, Slot, SlotStatus } from '../types'
 import { seedSlots } from '../data/seedSlots'
+import { seedBookings } from '../data/seedBookings'
 
 type Ctx = {
   slots: Slot[]
@@ -27,8 +28,12 @@ const makeRef = () => {
 }
 
 export function BookingProvider({ children }: { children: ReactNode }) {
-  const [slots, setSlots] = useState<Slot[]>(() => seedSlots())
-  const [bookings, setBookings] = useState<Booking[]>([])
+  const [slots, setSlots] = useState<Slot[]>(() => {
+    const base = seedSlots()
+    const taken = new Set(seedBookings().map(b => b.slotId))
+    return base.map(s => taken.has(s.id) ? { ...s, status: 'booked' } : s)
+  })
+  const [bookings, setBookings] = useState<Booking[]>(() => seedBookings())
 
   const value = useMemo<Ctx>(() => ({
     slots,
