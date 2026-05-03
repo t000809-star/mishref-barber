@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+
+html, body, #root { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #F5EFE6;
+  color: #15201C;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Mobile-first: lock content width and prevent horizontal scroll */
+html, body { overflow-x: hidden; }
+
+/* Subtle texture for cream backgrounds */
+.bg-paper {
+  background-image:
+    radial-gradient(rgba(15,32,28,0.04) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* Admin scope — visually distinct from customer */
+.admin-scope {
+  background: #0E4D3F;
+  color: #F5EFE6;
+}
+.admin-scope .panel { background: #093328; }
