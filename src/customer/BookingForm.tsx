@@ -18,6 +18,7 @@ export default function BookingForm() {
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   if (!slot || !service) {
     return (
@@ -36,14 +37,21 @@ export default function BookingForm() {
     )
   }
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submitting) return
     if (!name.trim()) return setError('We need a name to greet you with.')
     const cleanPhone = phone.replace(/[^\d+]/g, '')
     if (cleanPhone.length < 7) return setError('Enter a phone we can reach you on.')
     setError(null)
-    const b = createBooking({ slotId, serviceId, customerName: name, phone, notes })
-    nav(`/confirmed/${b.id}`, { replace: true })
+    setSubmitting(true)
+    try {
+      const b = await createBooking({ slotId, serviceId, customerName: name, phone, notes })
+      nav(`/confirmed/${b.id}`, { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -93,9 +101,10 @@ export default function BookingForm() {
 
         <button
           type="submit"
-          className="w-full rounded-full bg-brand text-cream font-medium py-4 shadow-card active:scale-[.99] transition"
+          disabled={submitting}
+          className="w-full rounded-full bg-brand text-cream font-medium py-4 shadow-card active:scale-[.99] transition disabled:opacity-60"
         >
-          Confirm booking
+          {submitting ? 'Confirming…' : 'Confirm booking'}
         </button>
         <p className="text-[11px] text-center text-muted">
           By booking you agree to a 1 hour cancellation window.

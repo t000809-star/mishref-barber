@@ -20,12 +20,11 @@ export default function BookingDetail() {
     )
   }
 
-  const markDone = () => updateBookingStatus(booking.id, 'done')
-  const cancel = () => {
-    if (confirm('Cancel this booking? The slot will be re-opened.')) {
-      updateBookingStatus(booking.id, 'cancelled')
-      nav('/admin/bookings')
-    }
+  const markDone = () => { void updateBookingStatus(booking.id, 'done') }
+  const cancel = async () => {
+    if (!confirm('Cancel this booking? The slot will be re-opened.')) return
+    await updateBookingStatus(booking.id, 'cancelled')
+    nav('/admin/bookings')
   }
 
   return (

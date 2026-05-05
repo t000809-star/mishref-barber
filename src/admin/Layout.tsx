@@ -1,7 +1,9 @@
 import { NavLink, Outlet, Link } from 'react-router-dom'
 import { Logo } from '../components/Logo'
+import { useBooking } from '../store/BookingContext'
 
 export default function AdminLayout() {
+  const { loading, error } = useBooking()
   return (
     <div className="admin-scope min-h-full">
       <header className="px-5 pt-5 pb-3 flex items-center justify-between border-b border-cream/10">
@@ -17,7 +19,13 @@ export default function AdminLayout() {
       </nav>
 
       <main className="px-4 pb-24 max-w-md mx-auto w-full">
-        <Outlet />
+        {error ? (
+          <p className="pt-10 text-sm text-red-300">Couldn't reach the booking system: {error}</p>
+        ) : loading ? (
+          <p className="pt-10 text-sm text-cream/70">Loading…</p>
+        ) : (
+          <Outlet />
+        )}
       </main>
     </div>
   )
