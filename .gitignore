@@ -17,6 +17,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local DB snapshot (contains customer data)
+db-snapshot.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
