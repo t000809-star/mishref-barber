@@ -30,3 +30,4 @@ db-snapshot.md
 *.njsproj
 *.sln
 *.sw?
+.vercel
