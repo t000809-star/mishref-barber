@@ -16,6 +16,7 @@ type Ctx = {
     notes?: string
   }) => Promise<Booking>
   updateBookingStatus: (id: string, status: BookingStatus) => Promise<void>
+  deleteBooking: (id: string) => Promise<void>
   setSlotStatus: (id: string, status: SlotStatus) => Promise<void>
   addSlot: (date: string, time: string) => Promise<void>
 }
@@ -196,6 +197,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         if (slotErr) throw slotErr
         setSlots(ss => ss.map(s => s.id === target.slotId ? { ...s, status: 'open' } : s))
       }
+    },
+    deleteBooking: async (id) => {
+      const { error } = await supabase.from('bookings').delete().eq('id', id)
+      if (error) throw error
+      setBookings(b => b.filter(x => x.id !== id))
     },
     setSlotStatus: async (id, status) => {
       const { error } = await supabase

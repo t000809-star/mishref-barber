@@ -6,7 +6,7 @@ import { formatLongDate, formatTime } from '../lib/format'
 export default function BookingDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { bookings, slots, updateBookingStatus } = useBooking()
+  const { bookings, slots, updateBookingStatus, deleteBooking } = useBooking()
   const booking = bookings.find(b => b.id === id)
   const slot = booking ? slots.find(s => s.id === booking.slotId) : undefined
   const service = booking ? serviceById(booking.serviceId) : undefined
@@ -24,6 +24,11 @@ export default function BookingDetail() {
   const cancel = async () => {
     if (!confirm('Cancel this booking? The slot will be re-opened.')) return
     await updateBookingStatus(booking.id, 'cancelled')
+    nav('/admin/bookings')
+  }
+  const remove = async () => {
+    if (!confirm('Delete this booking permanently? This cannot be undone.')) return
+    await deleteBooking(booking.id)
     nav('/admin/bookings')
   }
 
@@ -64,6 +69,12 @@ export default function BookingDetail() {
           <button onClick={cancel}
             className="block w-full rounded-full border border-red-300/50 text-red-200 font-medium py-3 active:scale-[.99] transition">
             Cancel booking
+          </button>
+        )}
+        {booking.status === 'cancelled' && (
+          <button onClick={remove}
+            className="block w-full rounded-full bg-red-600 text-cream font-medium py-3 active:scale-[.99] transition">
+            Delete permanently
           </button>
         )}
       </div>
