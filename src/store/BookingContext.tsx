@@ -99,12 +99,56 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setLoading(false)
       }
     })()
+
+    // Realtime: stream INSERT/UPDATE/DELETE on slots + bookings over the
+    // Supabase websocket. RLS is applied to events too — anon subscribers
+    // get slot events but not bookings events.
+    let channel = subscribeRealtime()
+
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      // Auth context for the live socket changed — tear down and re-open
+      // so the new role's RLS gates the event stream, then refetch.
+      supabase.removeChannel(channel)
+      channel = subscribeRealtime()
       reload().catch(() => {})
     })
     return () => {
       cancelled = true
       sub.subscription.unsubscribe()
+      supabase.removeChannel(channel)
+    }
+
+    function subscribeRealtime() {
+      return supabase
+        .channel('booking-stream')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const s = slotFromRow(payload.new as Db['slots'])
+            setSlots(prev => {
+              const idx = prev.findIndex(x => x.id === s.id)
+              if (idx === -1) return [...prev, s]
+              const next = prev.slice()
+              next[idx] = s
+              return next
+            })
+          } else if (payload.eventType === 'DELETE') {
+            const id = (payload.old as { id?: string }).id
+            if (id) setSlots(prev => prev.filter(x => x.id !== id))
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const b = bookingFromRow(payload.new as Db['bookings'])
+            setBookings(prev => prev.some(x => x.id === b.id) ? prev : [b, ...prev])
+          } else if (payload.eventType === 'UPDATE') {
+            const b = bookingFromRow(payload.new as Db['bookings'])
+            setBookings(prev => prev.map(x => x.id === b.id ? b : x))
+          } else if (payload.eventType === 'DELETE') {
+            const id = (payload.old as { id?: string }).id
+            if (id) setBookings(prev => prev.filter(x => x.id !== id))
+          }
+        })
+        .subscribe()
     }
   }, [reload])
 
