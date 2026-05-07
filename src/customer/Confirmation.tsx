@@ -1,44 +1,88 @@
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useBooking } from '../store/BookingContext'
-import { serviceById } from '../data/services'
+import { supabase } from '../lib/supabase'
 import { formatLongDate, formatTime } from '../lib/format'
+
+type Receipt = {
+  ok: true
+  ref: string
+  message: string
+  booking: {
+    id: string
+    customer_name: string
+    phone: string
+    service: string
+    duration_min: number | null
+    price_kwd: number | null
+    date: string | null
+    time: string | null
+    status: string
+    notes?: string | null
+  }
+}
 
 export default function Confirmation() {
   const { id } = useParams()
-  const { bookings, slots } = useBooking()
-  const booking = bookings.find(b => b.id === id)
-  const slot = booking ? slots.find(s => s.id === booking.slotId) : undefined
-  const service = booking ? serviceById(booking.serviceId) : undefined
+  const [data, setData] = useState<Receipt | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  if (!booking || !slot || !service) {
+  useEffect(() => {
+    let cancelled = false
+    if (!id) {
+      setError('Missing booking reference.')
+      setLoading(false)
+      return
+    }
+    ;(async () => {
+      const { data, error } = await supabase.functions.invoke<Receipt>('confirm-booking', {
+        body: { bookingId: id },
+      })
+      if (cancelled) return
+      if (error) setError(error.message)
+      else if (!data?.ok) setError('Booking not found.')
+      else setData(data)
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [id])
+
+  if (loading) return <p className="pt-10 text-sm text-muted">Confirming your booking…</p>
+  if (error || !data) {
     return (
       <div className="pt-10 text-center">
-        <p>We couldn't find that booking.</p>
+        <p>We couldn't confirm that booking{error ? `: ${error}` : '.'}</p>
         <Link to="/" className="underline mt-3 inline-block">Back to start</Link>
       </div>
     )
   }
 
+  const b = data.booking
   return (
     <div className="pt-4">
       <div className="text-center">
         <div className="mx-auto h-14 w-14 rounded-full bg-brand text-cream flex items-center justify-center text-2xl">✓</div>
         <h1 className="font-display text-3xl text-brand-dark mt-4">You're booked.</h1>
-        <p className="text-muted text-sm mt-1">We'll text {booking.phone} if anything changes.</p>
+        <p className="text-muted text-sm mt-1">We'll text {b.phone} if anything changes.</p>
       </div>
 
       <div className="mt-6 rounded-2xl bg-white border border-sand p-5 shadow-card">
         <div className="text-xs uppercase tracking-wider text-gold">Booking ref</div>
-        <div className="font-display text-2xl text-brand-dark">{booking.id}</div>
+        <div className="font-display text-2xl text-brand-dark">{b.id}</div>
 
         <hr className="my-4 border-sand" />
 
-        <Row k="Service" v={service.name} />
-        <Row k="When" v={`${formatLongDate(slot.date)} · ${formatTime(slot.time)}`} />
-        <Row k="Duration" v={`${service.durationMin} min`} />
-        <Row k="Price" v={`${service.priceKwd} KWD (pay in chair)`} />
-        <Row k="Name" v={booking.customerName} />
-        {booking.notes && <Row k="Notes" v={booking.notes} />}
+        <Row k="Service" v={b.service} />
+        {b.date && b.time && <Row k="When" v={`${formatLongDate(b.date)} · ${formatTime(b.time)}`} />}
+        {b.duration_min != null && <Row k="Duration" v={`${b.duration_min} min`} />}
+        {b.price_kwd != null && <Row k="Price" v={`${b.price_kwd} KWD (pay in chair)`} />}
+        <Row k="Name" v={b.customer_name} />
+        {b.notes && <Row k="Notes" v={b.notes} />}
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-cream border border-sand p-4 text-sm text-ink">
+        <div className="text-xs uppercase tracking-wider text-muted mb-1">Confirmation</div>
+        {data.message}
       </div>
 
       <div className="mt-6 rounded-2xl bg-brand-dark text-cream p-5">

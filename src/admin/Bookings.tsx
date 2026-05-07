@@ -3,12 +3,34 @@ import { Link } from 'react-router-dom'
 import { useBooking } from '../store/BookingContext'
 import { serviceById } from '../data/services'
 import { formatDate, formatTime } from '../lib/format'
+import { supabase } from '../lib/supabase'
 import type { BookingStatus } from '../types'
 
 export default function Bookings() {
   const { bookings, slots } = useBooking()
   const [filter, setFilter] = useState<'all' | BookingStatus>('all')
   const [day, setDay] = useState<'all' | string>('all')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  const exportCsv = async () => {
+    if (exporting) return
+    setExportError(null)
+    setExporting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke<{ signedUrl: string; rows: number }>(
+        'export-bookings',
+        { method: 'POST' },
+      )
+      if (error) throw error
+      if (!data?.signedUrl) throw new Error('No URL returned')
+      window.open(data.signedUrl, '_blank', 'noopener')
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const dates = useMemo(() => {
     const set = new Set<string>()
@@ -28,7 +50,17 @@ export default function Bookings() {
 
   return (
     <div className="pt-4">
-      <h1 className="font-display text-3xl text-cream">All bookings</h1>
+      <div className="flex items-baseline justify-between gap-3">
+        <h1 className="font-display text-3xl text-cream">All bookings</h1>
+        <button
+          onClick={exportCsv}
+          disabled={exporting}
+          className="rounded-full bg-gold text-brand-dark text-xs font-medium px-3 py-1.5 disabled:opacity-60"
+        >
+          {exporting ? 'Exporting…' : 'Export CSV'}
+        </button>
+      </div>
+      {exportError && <p className="mt-2 text-xs text-red-300">Export failed: {exportError}</p>}
 
       <div className="mt-3 flex gap-2 overflow-x-auto -mx-4 px-4 pb-2">
         {(['all', 'pending', 'done', 'cancelled'] as const).map(f => (
