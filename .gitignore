@@ -19,6 +19,7 @@ dist-ssr
 
 # Local DB snapshot (contains customer data)
 db-snapshot.md
+customers.csv
 
 # Editor directories and files
 .vscode/*
