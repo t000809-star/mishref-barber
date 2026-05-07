@@ -13,6 +13,8 @@ import Dashboard from './admin/Dashboard'
 import Bookings from './admin/Bookings'
 import BookingDetail from './admin/BookingDetail'
 import SlotsManager from './admin/Slots'
+import Login from './admin/Login'
+import RequireAuth from './admin/RequireAuth'
 
 export default function App() {
   return (
@@ -27,10 +29,13 @@ export default function App() {
             <Route path="/confirmed/:id" element={<Confirmation />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="bookings" element={<Bookings />} />
-            <Route path="bookings/:id" element={<BookingDetail />} />
-            <Route path="slots" element={<SlotsManager />} />
+            <Route path="login" element={<Login />} />
+            <Route element={<RequireAuth />}>
+              <Route index element={<Dashboard />} />
+              <Route path="bookings" element={<Bookings />} />
+              <Route path="bookings/:id" element={<BookingDetail />} />
+              <Route path="slots" element={<SlotsManager />} />
+            </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

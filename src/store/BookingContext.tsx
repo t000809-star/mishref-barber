@@ -99,8 +99,12 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setLoading(false)
       }
     })()
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      reload().catch(() => {})
+    })
     return () => {
       cancelled = true
+      sub.subscription.unsubscribe()
     }
   }, [reload])
 
@@ -120,18 +124,14 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
         status: 'pending',
       }
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert(row)
-        .select()
-        .single()
+      const { error } = await supabase.from('bookings').insert(row)
       if (error) throw error
       const { error: slotErr } = await supabase
         .from('slots')
         .update({ status: 'booked' })
         .eq('id', input.slotId)
       if (slotErr) throw slotErr
-      const booking = bookingFromRow(data as Db['bookings'])
+      const booking = bookingFromRow(row)
       setBookings(b => [booking, ...b])
       setSlots(ss => ss.map(s => s.id === input.slotId ? { ...s, status: 'booked' } : s))
       return booking
