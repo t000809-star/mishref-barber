@@ -21,6 +21,9 @@ dist-ssr
 db-snapshot.md
 customers.csv
 
+# Supabase CLI scratch
+supabase/.temp
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
