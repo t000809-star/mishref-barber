@@ -6,9 +6,13 @@ import { formatDate, formatTime } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import type { BookingStatus } from '../types'
 
+// Default view = "active" (pending only). Done bookings live in the
+// History filter; cancelled stay reachable via Cancelled.
+type Filter = 'active' | BookingStatus
+
 export default function Bookings() {
   const { bookings, slots } = useBooking()
-  const [filter, setFilter] = useState<'all' | BookingStatus>('all')
+  const [filter, setFilter] = useState<Filter>('active')
   const [day, setDay] = useState<'all' | string>('all')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -41,10 +45,13 @@ export default function Bookings() {
     return Array.from(set).sort()
   }, [bookings, slots])
 
+  const matchesFilter = (status: BookingStatus) =>
+    filter === 'active' ? status === 'pending' : status === filter
+
   const list = bookings
     .map(b => ({ b, s: slots.find(x => x.id === b.slotId) }))
     .filter(({ b, s }) => s
-      && (filter === 'all' || b.status === filter)
+      && matchesFilter(b.status)
       && (day === 'all' || s.date === day))
     .sort((a, b) => (a.s!.date + a.s!.time).localeCompare(b.s!.date + b.s!.time))
 
@@ -63,9 +70,9 @@ export default function Bookings() {
       {exportError && <p className="mt-2 text-xs text-red-300">Export failed: {exportError}</p>}
 
       <div className="mt-3 flex gap-2 overflow-x-auto -mx-4 px-4 pb-2">
-        {(['all', 'pending', 'done', 'cancelled'] as const).map(f => (
+        {(['active', 'done', 'cancelled'] as const).map(f => (
           <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
-            {f === 'all' ? 'All' : f[0].toUpperCase() + f.slice(1)}
+            {f === 'active' ? 'Active' : f === 'done' ? 'History' : 'Cancelled'}
           </Chip>
         ))}
       </div>

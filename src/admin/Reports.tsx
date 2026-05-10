@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 type Totals = {
   collected_captured: number
   collected_refunded: number
+  collected_in_chair: number
   collected_net: number
   pending_count: number
   pending_value: number
@@ -46,6 +47,7 @@ export default function Reports() {
         setTotals({
           collected_captured:  Number(d.collected_captured),
           collected_refunded:  Number(d.collected_refunded),
+          collected_in_chair:  Number(d.collected_in_chair),
           collected_net:       Number(d.collected_net),
           pending_count:       Number(d.pending_count),
           pending_value:       Number(d.pending_value),
@@ -87,7 +89,7 @@ export default function Reports() {
         <BigStat
           k="Collected (net)"
           v={KWD(totals.collected_net)}
-          sub={`${KWD(totals.collected_captured)} captured · ${KWD(totals.collected_refunded)} refunded`}
+          sub={`${KWD(totals.collected_captured)} online · ${KWD(totals.collected_in_chair)} in chair · ${KWD(totals.collected_refunded)} refunded`}
         />
         <BigStat
           k="Pending"
