@@ -7,6 +7,7 @@ import Services from './customer/Services'
 import SlotPicker from './customer/SlotPicker'
 import BookingForm from './customer/BookingForm'
 import Confirmation from './customer/Confirmation'
+import PaymentReturn from './customer/PaymentReturn'
 
 import AdminLayout from './admin/Layout'
 import Dashboard from './admin/Dashboard'
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/slots" element={<SlotPicker />} />
             <Route path="/book" element={<BookingForm />} />
             <Route path="/confirmed/:id" element={<Confirmation />} />
+            <Route path="/payment/return" element={<PaymentReturn />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="login" element={<Login />} />

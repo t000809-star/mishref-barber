@@ -26,6 +26,8 @@ export default function Confirmation() {
   const [data, setData] = useState<Receipt | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [payError, setPayError] = useState<string | null>(null)
+  const [paying, setPaying] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -83,6 +85,38 @@ export default function Confirmation() {
       <div className="mt-4 rounded-2xl bg-cream border border-sand p-4 text-sm text-ink">
         <div className="text-xs uppercase tracking-wider text-muted mb-1">Confirmation</div>
         {data.message}
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-white border border-sand p-4">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-gold">Pay now (optional)</div>
+            <div className="text-sm text-muted mt-1">Or pay in chair when you arrive.</div>
+          </div>
+          <span className="text-[10px] uppercase tracking-widest text-muted bg-sand/60 rounded-full px-2 py-0.5">test mode</span>
+        </div>
+        <button
+          onClick={async () => {
+            if (!id || paying) return
+            setPayError(null)
+            setPaying(true)
+            const { data: res, error } = await supabase.functions.invoke<{ redirectUrl: string }>(
+              'payment-start',
+              { body: { bookingId: id, returnUrl: `${window.location.origin}/payment/return` } },
+            )
+            if (error || !res?.redirectUrl) {
+              setPayError(error?.message ?? 'Could not start payment.')
+              setPaying(false)
+              return
+            }
+            window.location.href = res.redirectUrl
+          }}
+          disabled={paying}
+          className="mt-3 w-full rounded-full bg-brand text-cream font-medium py-3 disabled:opacity-60"
+        >
+          {paying ? 'Redirecting…' : `Pay ${b.price_kwd ?? ''} KWD`}
+        </button>
+        {payError && <p className="mt-2 text-xs text-red-700">{payError}</p>}
       </div>
 
       <div className="mt-6 rounded-2xl bg-brand-dark text-cream p-5">

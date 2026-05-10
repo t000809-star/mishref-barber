@@ -50,6 +50,7 @@ export default function BookingDetail() {
         <Row k="Phone" v={booking.phone} />
         {booking.notes && <Row k="Notes" v={booking.notes} />}
         <Row k="Price" v={`${service.priceKwd} KWD`} />
+        <Row k="Payment" v={booking.paid ? 'Paid online' : 'Pay in chair'} />
       </div>
 
       <div className="mt-5 space-y-2">

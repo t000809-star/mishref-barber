@@ -26,4 +26,6 @@ export type Booking = {
   notes?: string
   createdAt: string   // ISO
   status: BookingStatus
+  paid: boolean
+  tapChargeId?: string
 }

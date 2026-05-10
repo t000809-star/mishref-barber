@@ -27,5 +27,7 @@ export type Db = {
     notes: string | null
     created_at: string
     status: 'pending' | 'done' | 'cancelled'
+    paid?: boolean
+    tap_charge_id?: string | null
   }
 }

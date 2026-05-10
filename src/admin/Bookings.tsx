@@ -93,7 +93,12 @@ export default function Bookings() {
                   <div className="font-display text-lg text-cream">{formatTime(s!.time)}</div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-cream font-medium truncate">{b.customerName}</div>
+                  <div className="text-cream font-medium truncate flex items-center gap-2">
+                    <span className="truncate">{b.customerName}</span>
+                    {b.paid && (
+                      <span className="text-[9px] uppercase tracking-widest bg-gold text-brand-dark rounded-full px-1.5 py-0.5">paid</span>
+                    )}
+                  </div>
                   <div className="text-cream/70 text-sm truncate">{service?.name} · {b.id}</div>
                 </div>
                 <span className="text-cream/60 text-xs">›</span>

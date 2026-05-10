@@ -54,6 +54,8 @@ const bookingFromRow = (row: Db['bookings']): Booking => ({
   notes: row.notes ?? undefined,
   createdAt: row.created_at,
   status: row.status,
+  paid: row.paid ?? false,
+  tapChargeId: row.tap_charge_id ?? undefined,
 })
 
 async function ensureSlotsForNextDays(days: number) {
