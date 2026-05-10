@@ -43,6 +43,7 @@ export default function AdminLayout() {
           <Tab to="/admin" end>Today</Tab>
           <Tab to="/admin/bookings">All bookings</Tab>
           <Tab to="/admin/slots">Slot manager</Tab>
+          <Tab to="/admin/reports">Reports</Tab>
           <Link to="/" className="ml-auto px-3 py-2 rounded-full text-xs text-cream/70 hover:text-cream whitespace-nowrap">View site →</Link>
         </nav>
       )}

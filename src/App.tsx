@@ -14,6 +14,7 @@ import Dashboard from './admin/Dashboard'
 import Bookings from './admin/Bookings'
 import BookingDetail from './admin/BookingDetail'
 import SlotsManager from './admin/Slots'
+import Reports from './admin/Reports'
 import Login from './admin/Login'
 import RequireAuth from './admin/RequireAuth'
 
@@ -37,6 +38,7 @@ export default function App() {
               <Route path="bookings" element={<Bookings />} />
               <Route path="bookings/:id" element={<BookingDetail />} />
               <Route path="slots" element={<SlotsManager />} />
+              <Route path="reports" element={<Reports />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
