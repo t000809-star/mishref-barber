@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
   const { data: booking, error: bErr } = await supabase
     .from('bookings')
-    .select('id, customer_name, phone, service_id, slot_id, notes, created_at, status')
+    .select('id, customer_name, phone, service_id, slot_id, notes, created_at, status, paid')
     .eq('id', bookingId)
     .maybeSingle()
   if (bErr) return json({ error: bErr.message }, 500)
@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
       date: slot?.date ?? null,
       time: slot?.time ?? null,
       status: booking.status,
+      paid: booking.paid ?? false,
     },
   })
 })
