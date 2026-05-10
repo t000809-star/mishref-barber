@@ -101,6 +101,18 @@ Deno.serve(async (req) => {
     .eq('id', bookingId)
   if (upErr) return json({ error: upErr.message }, 500)
 
+  // Audit log: this charge was initiated. We'll fill in card brand / last4
+  // / final status when the customer comes back through payment-verify.
+  await supabase.from('payments').insert({
+    booking_id: bookingId,
+    type: 'charge',
+    tap_id: chargeId,
+    amount: tapJson.amount ?? service.priceKwd,
+    currency: tapJson.currency ?? 'KWD',
+    status: tapJson.status ?? 'INITIATED',
+    raw: tapJson,
+  })
+
   return json({ ok: true, chargeId, redirectUrl: transactionUrl })
 })
 

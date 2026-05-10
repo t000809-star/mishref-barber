@@ -66,6 +66,40 @@ Deno.serve(async (req) => {
     if (upErr) return json({ error: upErr.message }, 500)
   }
 
+  // Audit log: update the existing charge row with the final outcome.
+  // Pull card / brand / failure details out of Tap's response.
+  const card = tapJson.card ?? tapJson.source ?? {}
+  const response = tapJson.response ?? {}
+  const update = {
+    status,
+    amount: tapJson.amount ?? null,
+    currency: tapJson.currency ?? null,
+    payment_method: card.scheme ?? card.brand ?? card.payment_method ?? null,
+    card_last4: card.last_four ?? card.last4 ?? null,
+    card_brand: card.brand ?? card.scheme ?? null,
+    failure_code: !captured ? (response.code ?? null) : null,
+    failure_message: !captured ? (response.message ?? null) : null,
+    raw: tapJson,
+    updated_at: new Date().toISOString(),
+  }
+  const { data: existing } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('tap_id', chargeId)
+    .eq('type', 'charge')
+    .maybeSingle()
+
+  if (existing) {
+    await supabase.from('payments').update(update).eq('id', existing.id)
+  } else {
+    await supabase.from('payments').insert({
+      booking_id: bookingId,
+      type: 'charge',
+      tap_id: chargeId,
+      ...update,
+    })
+  }
+
   return json({
     ok: true,
     bookingId,
