@@ -1,111 +1,82 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useBooking } from '../store/BookingContext'
-import { serviceById } from '../data/services'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-type PaymentRow = {
-  id: string
-  booking_id: string
-  type: 'charge' | 'refund'
-  amount: number | null
-  status: string | null
-  created_at: string
+// All math lives in Postgres (see supabase/migrations/0006_report_views.sql).
+// Frontend only renders.
+
+type Totals = {
+  collected_captured: number
+  collected_refunded: number
+  collected_net: number
+  pending_count: number
+  pending_value: number
+  this_month_net: number
+  this_month_bookings: number
+  lifetime_bookings: number
 }
 
-type MonthBucket = {
-  key: string          // YYYY-MM
-  label: string        // "May 2026"
+type MonthRow = {
+  month_key: string
+  label: string
   bookings: number
-  charges: number      // KWD captured
-  refunds: number      // KWD refunded
+  charges: number
+  refunds: number
+  net: number
 }
 
-const KWD = (n: number) => `${n.toFixed(n % 1 ? 2 : 0)} KWD`
-
-const monthKey = (iso: string) => iso.slice(0, 7)
-const monthLabel = (key: string) => {
-  const [y, m] = key.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString(undefined, { month: 'short', year: 'numeric' })
-}
+const KWD = (n: number) => `${(Number(n) || 0).toFixed(Number(n) % 1 ? 2 : 0)} KWD`
 
 export default function Reports() {
-  const { bookings, slots } = useBooking()
-  const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [totals, setTotals] = useState<Totals | null>(null)
+  const [trend, setTrend] = useState<MonthRow[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const { data } = await supabase
-        .from('payments')
-        .select('id, booking_id, type, amount, status, created_at')
-        .order('created_at', { ascending: false })
+      const [t, m] = await Promise.all([
+        supabase.from('report_totals').select('*').maybeSingle(),
+        supabase.from('report_monthly').select('*'),
+      ])
       if (cancelled) return
-      setPayments((data as PaymentRow[]) ?? [])
+      if (t.error) setError(t.error.message)
+      else if (t.data) {
+        const d = t.data as Record<string, string | number>
+        setTotals({
+          collected_captured:  Number(d.collected_captured),
+          collected_refunded:  Number(d.collected_refunded),
+          collected_net:       Number(d.collected_net),
+          pending_count:       Number(d.pending_count),
+          pending_value:       Number(d.pending_value),
+          this_month_net:      Number(d.this_month_net),
+          this_month_bookings: Number(d.this_month_bookings),
+          lifetime_bookings:   Number(d.lifetime_bookings),
+        })
+      }
+      if (m.error) setError(m.error.message)
+      else if (m.data) {
+        setTrend((m.data as Record<string, string | number>[]).map(r => ({
+          month_key: String(r.month_key),
+          label:     String(r.label),
+          bookings:  Number(r.bookings),
+          charges:   Number(r.charges),
+          refunds:   Number(r.refunds),
+          net:       Number(r.net),
+        })))
+      }
       setLoading(false)
     })()
     return () => { cancelled = true }
   }, [])
 
-  const collected = useMemo(() => {
-    const charges = payments
-      .filter(p => p.type === 'charge' && p.status === 'CAPTURED')
-      .reduce((s, p) => s + Number(p.amount ?? 0), 0)
-    const refunds = payments
-      .filter(p => p.type === 'refund')
-      .reduce((s, p) => s + Number(p.amount ?? 0), 0)
-    return { charges, refunds, net: charges - refunds }
-  }, [payments])
+  if (loading) return <p className="pt-10 text-sm text-cream/70">Loading…</p>
+  if (error || !totals) {
+    return <p className="pt-10 text-sm text-red-300">Couldn't load reports{error ? `: ${error}` : ''}.</p>
+  }
 
-  // Pending = bookings that aren't cancelled and aren't paid yet.
-  // Value comes from the static service price for each booking.
-  const pending = useMemo(() => {
-    const rows = bookings.filter(b => b.status !== 'cancelled' && !b.paid)
-    const value = rows.reduce((s, b) => s + (serviceById(b.serviceId)?.priceKwd ?? 0), 0)
-    return { count: rows.length, value }
-  }, [bookings])
-
-  const thisMonthKey = new Date().toISOString().slice(0, 7)
-  const thisMonth = useMemo(() => {
-    const inMonth = (iso: string) => monthKey(iso) === thisMonthKey
-    const charges = payments
-      .filter(p => p.type === 'charge' && p.status === 'CAPTURED' && inMonth(p.created_at))
-      .reduce((s, p) => s + Number(p.amount ?? 0), 0)
-    const refunds = payments
-      .filter(p => p.type === 'refund' && inMonth(p.created_at))
-      .reduce((s, p) => s + Number(p.amount ?? 0), 0)
-    const bookingsThisMonth = bookings.filter(b => inMonth(b.createdAt)).length
-    return { net: charges - refunds, bookings: bookingsThisMonth }
-  }, [payments, bookings, thisMonthKey])
-
-  // Last 6 months including the current one.
-  const trend = useMemo<MonthBucket[]>(() => {
-    const now = new Date()
-    const months: MonthBucket[] = []
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
-      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-      months.push({ key, label: monthLabel(key), bookings: 0, charges: 0, refunds: 0 })
-    }
-    const byKey = new Map(months.map(m => [m.key, m]))
-    for (const b of bookings) {
-      const m = byKey.get(monthKey(b.createdAt))
-      if (m) m.bookings++
-    }
-    for (const p of payments) {
-      const m = byKey.get(monthKey(p.created_at))
-      if (!m) continue
-      if (p.type === 'charge' && p.status === 'CAPTURED') m.charges += Number(p.amount ?? 0)
-      else if (p.type === 'refund') m.refunds += Number(p.amount ?? 0)
-    }
-    return months
-  }, [bookings, payments])
-
-  const trendMaxNet = Math.max(1, ...trend.map(m => Math.max(0, m.charges - m.refunds)))
+  const trendMaxNet      = Math.max(1, ...trend.map(m => Math.max(0, m.net)))
   const trendMaxBookings = Math.max(1, ...trend.map(m => m.bookings))
-
-  // Avoid the "useless slots" warning.
-  void slots
 
   return (
     <div className="pt-4">
@@ -115,46 +86,43 @@ export default function Reports() {
       <div className="mt-4 grid grid-cols-2 gap-2">
         <BigStat
           k="Collected (net)"
-          v={KWD(collected.net)}
-          sub={`${KWD(collected.charges)} captured · ${KWD(collected.refunds)} refunded`}
+          v={KWD(totals.collected_net)}
+          sub={`${KWD(totals.collected_captured)} captured · ${KWD(totals.collected_refunded)} refunded`}
         />
         <BigStat
           k="Pending"
-          v={KWD(pending.value)}
-          sub={`${pending.count} booking${pending.count === 1 ? '' : 's'} unpaid`}
+          v={KWD(totals.pending_value)}
+          sub={`${totals.pending_count} booking${totals.pending_count === 1 ? '' : 's'} unpaid`}
         />
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <BigStat k="This month" v={KWD(thisMonth.net)} sub={`${thisMonth.bookings} booking${thisMonth.bookings === 1 ? '' : 's'}`} />
-        <BigStat k="Lifetime bookings" v={String(bookings.length)} sub="all time" />
+        <BigStat
+          k="This month"
+          v={KWD(totals.this_month_net)}
+          sub={`${totals.this_month_bookings} booking${totals.this_month_bookings === 1 ? '' : 's'}`}
+        />
+        <BigStat k="Lifetime bookings" v={String(totals.lifetime_bookings)} sub="all time" />
       </div>
 
       <h2 className="mt-7 font-display text-xl text-cream">Last 6 months</h2>
-      {loading ? (
-        <p className="text-cream/60 text-sm mt-3">Loading…</p>
-      ) : (
-        <div className="mt-3 panel rounded-2xl p-4 space-y-3">
-          {trend.map(m => {
-            const net = m.charges - m.refunds
-            return (
-              <div key={m.key}>
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-cream font-medium">{m.label}</span>
-                  <span className="text-cream/70">
-                    <span className="text-cream font-medium">{KWD(net)}</span>
-                    <span className="text-cream/50"> · {m.bookings} booking{m.bookings === 1 ? '' : 's'}</span>
-                  </span>
-                </div>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  <Bar label="KWD"      pct={(net / trendMaxNet) * 100}            tone="bg-gold" />
-                  <Bar label="bookings" pct={(m.bookings / trendMaxBookings) * 100} tone="bg-cream" />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      <div className="mt-3 panel rounded-2xl p-4 space-y-3">
+        {trend.map(m => (
+          <div key={m.month_key}>
+            <div className="flex items-baseline justify-between text-sm">
+              <span className="text-cream font-medium">{m.label}</span>
+              <span className="text-cream/70">
+                <span className="text-cream font-medium">{KWD(m.net)}</span>
+                <span className="text-cream/50"> · {m.bookings} booking{m.bookings === 1 ? '' : 's'}</span>
+              </span>
+            </div>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              <Bar label="KWD"      pct={(m.net / trendMaxNet) * 100}            tone="bg-gold" />
+              <Bar label="bookings" pct={(m.bookings / trendMaxBookings) * 100} tone="bg-cream" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
