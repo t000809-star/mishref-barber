@@ -1,6 +1,13 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { readMyBookings } from '../lib/myBookings'
 
 export default function Home() {
+  const [hasSaved, setHasSaved] = useState(false)
+  useEffect(() => {
+    setHasSaved(readMyBookings().length > 0)
+  }, [])
+
   return (
     <div className="pt-4">
       <p className="text-xs uppercase tracking-[0.2em] text-gold mb-3">Est. 2019 · Mishref</p>
@@ -18,6 +25,15 @@ export default function Home() {
       >
         Book a chair
       </Link>
+
+      {hasSaved && (
+        <Link
+          to="/my-bookings"
+          className="mt-3 block text-center text-sm text-brand underline"
+        >
+          My bookings
+        </Link>
+      )}
 
       <div className="mt-8 grid grid-cols-3 gap-3 text-center">
         <Stat k="Chairs" v="2" />
