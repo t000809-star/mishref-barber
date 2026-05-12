@@ -179,7 +179,12 @@ export default function Confirmation() {
         </ol>
       </div>
 
-      <Link to="/" className="block mt-6 text-center text-brand underline">Done</Link>
+      {!b.paid && (
+        <p className="mt-6 text-center text-xs text-muted">
+          Saved on this device — come back any time and tap “Find my booking” to pay.
+        </p>
+      )}
+      <Link to="/" className="block mt-3 text-center text-brand underline">Done</Link>
     </div>
   )
 }

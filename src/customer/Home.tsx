@@ -29,9 +29,9 @@ export default function Home() {
       {hasSaved && (
         <Link
           to="/my-bookings"
-          className="mt-3 block text-center text-sm text-brand underline"
+          className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-white border border-brand text-brand font-medium py-4 active:scale-[.99] transition shadow-card"
         >
-          My bookings
+          Find my booking
         </Link>
       )}
 
