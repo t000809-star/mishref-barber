@@ -70,20 +70,28 @@ Deno.serve(async (req) => {
     .eq('type', 'charge')
     .maybeSingle()
 
+  // KWD has 3 decimals (fils). Compare/sum money in integer fils to avoid
+  // floating-point drift that would otherwise let a refund exceed `remaining`
+  // by up to 1 fils per call.
+  const toFils = (kwd: number) => Math.round(kwd * 1000)
+
   // Sum existing refunds (so admin can't over-refund across multiple calls).
   const { data: priorRefunds } = await admin
     .from('payments')
     .select('amount')
     .eq('booking_id', bookingId)
     .eq('type', 'refund')
-  const refunded = (priorRefunds ?? []).reduce((sum, r) => sum + Number(r.amount ?? 0), 0)
+  const refundedFils = (priorRefunds ?? []).reduce(
+    (sum, r) => sum + toFils(Number(r.amount ?? 0)),
+    0,
+  )
   const original = Number(charge?.amount ?? 0)
-  const remaining = Math.max(0, original - refunded)
+  const remaining = Math.max(0, (toFils(original) - refundedFils) / 1000)
   if (remaining <= 0) return json({ error: 'Already fully refunded' }, 400)
 
   const refundAmount = amount != null ? amount : remaining
   if (refundAmount <= 0) return json({ error: 'Amount must be positive' }, 400)
-  if (refundAmount > remaining + 0.001) {
+  if (toFils(refundAmount) > toFils(remaining)) {
     return json({ error: `Cannot refund more than ${remaining}` }, 400)
   }
 
@@ -122,8 +130,9 @@ Deno.serve(async (req) => {
   })
 
   // If the booking is now fully refunded, clear the paid flag.
-  const totalRefunded = refunded + refundAmount
-  if (totalRefunded + 0.001 >= original) {
+  const totalRefundedFils = refundedFils + toFils(refundAmount)
+  const fullyRefunded = totalRefundedFils >= toFils(original)
+  if (fullyRefunded) {
     await admin.from('bookings').update({ paid: false }).eq('id', bookingId)
   }
 
@@ -132,7 +141,7 @@ Deno.serve(async (req) => {
     bookingId,
     refundId: tapJson.id ?? null,
     amount: refundAmount,
-    fullyRefunded: totalRefunded + 0.001 >= original,
+    fullyRefunded,
   })
 })
 
