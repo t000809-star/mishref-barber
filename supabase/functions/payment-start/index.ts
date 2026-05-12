@@ -33,7 +33,23 @@ Deno.serve(async (req) => {
     return json({ error: 'Body must be JSON: { bookingId, returnUrl }' }, 400)
   }
   if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400)
-  if (!/^https?:\/\//.test(returnUrl)) return json({ error: 'Invalid return URL' }, 400)
+
+  // returnUrl is handed to Tap as the post-checkout redirect target, so an
+  // attacker-controlled value would let them land paying customers on a
+  // phishing page. Restrict to an explicit allow-list of origins configured
+  // via the ALLOWED_REDIRECT_ORIGINS function secret (comma-separated).
+  const allowed = (Deno.env.get('ALLOWED_REDIRECT_ORIGINS') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (allowed.length === 0) return json({ error: 'Server misconfigured' }, 500)
+  let parsedReturn: URL
+  try {
+    parsedReturn = new URL(returnUrl)
+  } catch {
+    return json({ error: 'Invalid return URL' }, 400)
+  }
+  if (!allowed.includes(parsedReturn.origin)) return json({ error: 'Invalid return URL' }, 400)
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
