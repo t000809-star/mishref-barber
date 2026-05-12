@@ -6,32 +6,28 @@
 // this single-user app).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
-  if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405, cors)
 
   // Verify the JWT.
   const authHeader = req.headers.get('Authorization') ?? ''
-  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Missing bearer token' }, 401)
+  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Missing bearer token' }, 401, cors)
   const userClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
     { global: { headers: { Authorization: authHeader } } },
   )
   const { data: userData, error: userErr } = await userClient.auth.getUser()
-  if (userErr || !userData.user) return json({ error: 'Unauthorized' }, 401)
+  if (userErr || !userData.user) return json({ error: 'Unauthorized' }, 401, cors)
 
   const adminEmail = Deno.env.get('ADMIN_EMAIL')
-  if (!adminEmail) return json({ error: 'Server misconfigured' }, 500)
+  if (!adminEmail) return json({ error: 'Server misconfigured' }, 500, cors)
   if (userData.user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
-    return json({ error: 'Forbidden' }, 403)
+    return json({ error: 'Forbidden' }, 403, cors)
   }
 
   let bookingId: string
@@ -43,9 +39,9 @@ Deno.serve(async (req) => {
     amount = body.amount != null ? Number(body.amount) : null
     reason = body.reason ? String(body.reason) : null
   } catch {
-    return json({ error: 'Body must be JSON: { bookingId, amount?, reason? }' }, 400)
+    return json({ error: 'Body must be JSON: { bookingId, amount?, reason? }' }, 400, cors)
   }
-  if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400)
+  if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400, cors)
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -57,10 +53,10 @@ Deno.serve(async (req) => {
     .select('id, tap_charge_id, paid, customer_name')
     .eq('id', bookingId)
     .maybeSingle()
-  if (bErr) return json({ error: bErr.message }, 500)
-  if (!booking) return json({ error: 'Booking not found' }, 404)
-  if (!booking.tap_charge_id) return json({ error: 'No charge on this booking' }, 400)
-  if (!booking.paid) return json({ error: 'Booking is not paid' }, 400)
+  if (bErr) return json({ error: bErr.message }, 500, cors)
+  if (!booking) return json({ error: 'Booking not found' }, 404, cors)
+  if (!booking.tap_charge_id) return json({ error: 'No charge on this booking' }, 400, cors)
+  if (!booking.paid) return json({ error: 'Booking is not paid' }, 400, cors)
 
   // Pull the original captured charge — refund amount can't exceed it.
   const { data: charge } = await admin
@@ -87,16 +83,16 @@ Deno.serve(async (req) => {
   )
   const original = Number(charge?.amount ?? 0)
   const remaining = Math.max(0, (toFils(original) - refundedFils) / 1000)
-  if (remaining <= 0) return json({ error: 'Already fully refunded' }, 400)
+  if (remaining <= 0) return json({ error: 'Already fully refunded' }, 400, cors)
 
   const refundAmount = amount != null ? amount : remaining
-  if (refundAmount <= 0) return json({ error: 'Amount must be positive' }, 400)
+  if (refundAmount <= 0) return json({ error: 'Amount must be positive' }, 400, cors)
   if (toFils(refundAmount) > toFils(remaining)) {
-    return json({ error: `Cannot refund more than ${remaining}` }, 400)
+    return json({ error: `Cannot refund more than ${remaining}` }, 400, cors)
   }
 
   const tapKey = Deno.env.get('TAP_SECRET_KEY')
-  if (!tapKey) return json({ error: 'Tap not configured' }, 500)
+  if (!tapKey) return json({ error: 'Tap not configured' }, 500, cors)
 
   const tapBody = {
     charge_id: booking.tap_charge_id,
@@ -115,7 +111,7 @@ Deno.serve(async (req) => {
     body: JSON.stringify(tapBody),
   })
   const tapJson = await tapRes.json()
-  if (!tapRes.ok) return json({ error: 'Tap refund failed', details: tapJson }, 502)
+  if (!tapRes.ok) return json({ error: 'Tap refund failed', details: tapJson }, 502, cors)
 
   await admin.from('payments').insert({
     booking_id: bookingId,
@@ -142,10 +138,10 @@ Deno.serve(async (req) => {
     refundId: tapJson.id ?? null,
     amount: refundAmount,
     fullyRefunded,
-  })
+  }, 200, cors)
 })
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },

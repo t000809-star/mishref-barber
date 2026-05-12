@@ -4,6 +4,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { checkRateLimit } from '../_shared/rate-limit.ts'
+import { corsHeaders } from '../_shared/cors.ts'
 
 const SERVICES: Record<string, { name: string; durationMin: number; priceKwd: number }> = {
   'classic-cut':     { name: 'Classic Cut',     durationMin: 30, priceKwd: 5 },
@@ -12,13 +13,8 @@ const SERVICES: Record<string, { name: string; durationMin: number; priceKwd: nu
   'the-works':       { name: 'The Works',       durationMin: 60, priceKwd: 10 },
 }
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   let bookingId: string
@@ -26,10 +22,10 @@ Deno.serve(async (req) => {
     const body = await req.json()
     bookingId = String(body.bookingId ?? '')
   } catch {
-    return json({ error: 'Body must be JSON: { bookingId }' }, 400)
+    return json({ error: 'Body must be JSON: { bookingId }' }, 400, cors)
   }
   if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) {
-    return json({ error: 'Invalid booking ref' }, 400)
+    return json({ error: 'Invalid booking ref' }, 400, cors)
   }
 
   const supabase = createClient(
@@ -51,15 +47,15 @@ Deno.serve(async (req) => {
     .select('id, service_id, slot_id, notes, created_at, status, paid')
     .eq('id', bookingId)
     .maybeSingle()
-  if (bErr) return json({ error: bErr.message }, 500)
-  if (!booking) return json({ error: 'Booking not found' }, 404)
+  if (bErr) return json({ error: bErr.message }, 500, cors)
+  if (!booking) return json({ error: 'Booking not found' }, 404, cors)
 
   const { data: slot, error: sErr } = await supabase
     .from('slots')
     .select('date, time')
     .eq('id', booking.slot_id)
     .maybeSingle()
-  if (sErr) return json({ error: sErr.message }, 500)
+  if (sErr) return json({ error: sErr.message }, 500, cors)
 
   const service = SERVICES[booking.service_id]
 
@@ -82,10 +78,10 @@ Deno.serve(async (req) => {
       status: booking.status,
       paid: booking.paid ?? false,
     },
-  })
+  }, 200, cors)
 })
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },

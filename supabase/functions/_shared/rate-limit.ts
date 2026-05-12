@@ -13,6 +13,7 @@
 // where `limited` is either null (allowed) or a fully-formed 429 Response.
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+import { corsHeaders } from './cors.ts'
 
 export const RATE_LIMIT_MAX = 30        // requests per window
 export const RATE_LIMIT_WINDOW_SEC = 60 // window length in seconds
@@ -89,9 +90,9 @@ export async function checkRateLimit(
         {
           status: 429,
           headers: {
+            ...corsHeaders(req),
             'Content-Type': 'application/json',
             'Retry-After': String(retryAfter),
-            'Access-Control-Allow-Origin': '*',
           },
         },
       )

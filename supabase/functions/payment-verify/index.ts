@@ -5,16 +5,12 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { checkRateLimit } from '../_shared/rate-limit.ts'
-
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
-  if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405, cors)
 
   let bookingId: string
   let chargeId: string
@@ -23,10 +19,10 @@ Deno.serve(async (req) => {
     bookingId = String(body.bookingId ?? '')
     chargeId = String(body.chargeId ?? '')
   } catch {
-    return json({ error: 'Body must be JSON: { bookingId, chargeId }' }, 400)
+    return json({ error: 'Body must be JSON: { bookingId, chargeId }' }, 400, cors)
   }
-  if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400)
-  if (!chargeId.startsWith('chg_')) return json({ error: 'Invalid charge id' }, 400)
+  if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400, cors)
+  if (!chargeId.startsWith('chg_')) return json({ error: 'Invalid charge id' }, 400, cors)
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -44,20 +40,20 @@ Deno.serve(async (req) => {
     .select('id, tap_charge_id, paid')
     .eq('id', bookingId)
     .maybeSingle()
-  if (bErr) return json({ error: bErr.message }, 500)
-  if (!booking) return json({ error: 'Booking not found' }, 404)
+  if (bErr) return json({ error: bErr.message }, 500, cors)
+  if (!booking) return json({ error: 'Booking not found' }, 404, cors)
   if (booking.tap_charge_id !== chargeId) {
-    return json({ error: 'Charge id does not belong to this booking' }, 400)
+    return json({ error: 'Charge id does not belong to this booking' }, 400, cors)
   }
 
   const tapKey = Deno.env.get('TAP_SECRET_KEY')
-  if (!tapKey) return json({ error: 'Tap not configured' }, 500)
+  if (!tapKey) return json({ error: 'Tap not configured' }, 500, cors)
 
   const tapRes = await fetch(`https://api.tap.company/v2/charges/${chargeId}`, {
     headers: { Authorization: `Bearer ${tapKey}` },
   })
   const tapJson = await tapRes.json()
-  if (!tapRes.ok) return json({ error: 'Tap retrieve failed', details: tapJson }, 502)
+  if (!tapRes.ok) return json({ error: 'Tap retrieve failed', details: tapJson }, 502, cors)
 
   const status = String(tapJson.status ?? '')
   const captured = status === 'CAPTURED'
@@ -73,7 +69,7 @@ Deno.serve(async (req) => {
       chargeId,
       status,
       paid: true,
-    })
+    }, 200, cors)
   }
 
   if (captured && !booking.paid) {
@@ -81,7 +77,7 @@ Deno.serve(async (req) => {
       .from('bookings')
       .update({ paid: true })
       .eq('id', bookingId)
-    if (upErr) return json({ error: upErr.message }, 500)
+    if (upErr) return json({ error: upErr.message }, 500, cors)
   }
 
   // Audit log: update the existing charge row with the final outcome.
@@ -124,10 +120,10 @@ Deno.serve(async (req) => {
     chargeId,
     status,
     paid: captured || booking.paid,
-  })
+  }, 200, cors)
 })
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },

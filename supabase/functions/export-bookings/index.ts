@@ -4,19 +4,15 @@
 // admin in this single-user app).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
-  if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405, cors)
 
   const authHeader = req.headers.get('Authorization') ?? ''
-  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Missing bearer token' }, 401)
+  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Missing bearer token' }, 401, cors)
 
   // Verify the JWT by asking Supabase Auth who it belongs to.
   const userClient = createClient(
@@ -25,12 +21,12 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } },
   )
   const { data: userData, error: userErr } = await userClient.auth.getUser()
-  if (userErr || !userData.user) return json({ error: 'Unauthorized' }, 401)
+  if (userErr || !userData.user) return json({ error: 'Unauthorized' }, 401, cors)
 
   const adminEmail = Deno.env.get('ADMIN_EMAIL')
-  if (!adminEmail) return json({ error: 'Server misconfigured' }, 500)
+  if (!adminEmail) return json({ error: 'Server misconfigured' }, 500, cors)
   if (userData.user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
-    return json({ error: 'Forbidden' }, 403)
+    return json({ error: 'Forbidden' }, 403, cors)
   }
 
   // Service role for the actual work — read all bookings, write to storage.
@@ -43,7 +39,7 @@ Deno.serve(async (req) => {
     .from('bookings')
     .select('id, customer_name, phone, service_id, slot_id, status, notes, created_at')
     .order('created_at', { ascending: false })
-  if (qErr) return json({ error: qErr.message }, 500)
+  if (qErr) return json({ error: qErr.message }, 500, cors)
 
   const headers = ['id', 'customer_name', 'phone', 'service_id', 'slot_id', 'status', 'notes', 'created_at']
   const csv = [
@@ -56,12 +52,12 @@ Deno.serve(async (req) => {
   const { error: upErr } = await admin.storage
     .from('exports')
     .upload(path, new Blob([csv], { type: 'text/csv' }), { upsert: false })
-  if (upErr) return json({ error: `upload: ${upErr.message}` }, 500)
+  if (upErr) return json({ error: `upload: ${upErr.message}` }, 500, cors)
 
   const { data: signed, error: sErr } = await admin.storage
     .from('exports')
     .createSignedUrl(path, 60 * 5) // 5 min
-  if (sErr) return json({ error: `sign: ${sErr.message}` }, 500)
+  if (sErr) return json({ error: `sign: ${sErr.message}` }, 500, cors)
 
   return json({
     ok: true,
@@ -69,7 +65,7 @@ Deno.serve(async (req) => {
     rows: rows.length,
     signedUrl: signed.signedUrl,
     expiresInSec: 300,
-  })
+  }, 200, cors)
 })
 
 function csvCell(v: unknown) {
@@ -77,7 +73,7 @@ function csvCell(v: unknown) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },

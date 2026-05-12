@@ -5,6 +5,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { checkRateLimit } from '../_shared/rate-limit.ts'
+import { corsHeaders } from '../_shared/cors.ts'
 
 const SERVICES: Record<string, { name: string; priceKwd: number }> = {
   'classic-cut':     { name: 'Classic Cut',     priceKwd: 5 },
@@ -13,15 +14,10 @@ const SERVICES: Record<string, { name: string; priceKwd: number }> = {
   'the-works':       { name: 'The Works',       priceKwd: 10 },
 }
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
-  if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405, cors)
 
   let bookingId: string
   let returnUrl: string
@@ -30,9 +26,9 @@ Deno.serve(async (req) => {
     bookingId = String(body.bookingId ?? '')
     returnUrl = String(body.returnUrl ?? '')
   } catch {
-    return json({ error: 'Body must be JSON: { bookingId, returnUrl }' }, 400)
+    return json({ error: 'Body must be JSON: { bookingId, returnUrl }' }, 400, cors)
   }
-  if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400)
+  if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) return json({ error: 'Invalid booking ref' }, 400, cors)
 
   // returnUrl is handed to Tap as the post-checkout redirect target, so an
   // attacker-controlled value would let them land paying customers on a
@@ -42,14 +38,14 @@ Deno.serve(async (req) => {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  if (allowed.length === 0) return json({ error: 'Server misconfigured' }, 500)
+  if (allowed.length === 0) return json({ error: 'Server misconfigured' }, 500, cors)
   let parsedReturn: URL
   try {
     parsedReturn = new URL(returnUrl)
   } catch {
-    return json({ error: 'Invalid return URL' }, 400)
+    return json({ error: 'Invalid return URL' }, 400, cors)
   }
-  if (!allowed.includes(parsedReturn.origin)) return json({ error: 'Invalid return URL' }, 400)
+  if (!allowed.includes(parsedReturn.origin)) return json({ error: 'Invalid return URL' }, 400, cors)
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -64,15 +60,15 @@ Deno.serve(async (req) => {
     .select('id, customer_name, phone, service_id, paid')
     .eq('id', bookingId)
     .maybeSingle()
-  if (bErr) return json({ error: bErr.message }, 500)
-  if (!booking) return json({ error: 'Booking not found' }, 404)
-  if (booking.paid) return json({ error: 'Already paid' }, 409)
+  if (bErr) return json({ error: bErr.message }, 500, cors)
+  if (!booking) return json({ error: 'Booking not found' }, 404, cors)
+  if (booking.paid) return json({ error: 'Already paid' }, 409, cors)
 
   const service = SERVICES[booking.service_id]
-  if (!service) return json({ error: 'Unknown service' }, 400)
+  if (!service) return json({ error: 'Unknown service' }, 400, cors)
 
   const tapKey = Deno.env.get('TAP_SECRET_KEY')
-  if (!tapKey) return json({ error: 'Tap not configured' }, 500)
+  if (!tapKey) return json({ error: 'Tap not configured' }, 500, cors)
 
   const [firstName, ...rest] = (booking.customer_name || 'Customer').split(/\s+/)
   const lastName = rest.join(' ') || 'Guest'
@@ -106,20 +102,20 @@ Deno.serve(async (req) => {
   })
   const tapJson = await tapRes.json()
   if (!tapRes.ok) {
-    return json({ error: 'Tap rejected the charge', details: tapJson }, 502)
+    return json({ error: 'Tap rejected the charge', details: tapJson }, 502, cors)
   }
 
   const chargeId = tapJson.id as string
   const transactionUrl = tapJson.transaction?.url as string | undefined
   if (!chargeId || !transactionUrl) {
-    return json({ error: 'Tap returned no transaction URL', details: tapJson }, 502)
+    return json({ error: 'Tap returned no transaction URL', details: tapJson }, 502, cors)
   }
 
   const { error: upErr } = await supabase
     .from('bookings')
     .update({ tap_charge_id: chargeId })
     .eq('id', bookingId)
-  if (upErr) return json({ error: upErr.message }, 500)
+  if (upErr) return json({ error: upErr.message }, 500, cors)
 
   // Audit log: this charge was initiated. We'll fill in card brand / last4
   // / final status when the customer comes back through payment-verify.
@@ -133,10 +129,10 @@ Deno.serve(async (req) => {
     raw: tapJson,
   })
 
-  return json({ ok: true, chargeId, redirectUrl: transactionUrl })
+  return json({ ok: true, chargeId, redirectUrl: transactionUrl }, 200, cors)
 })
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },
