@@ -18,14 +18,21 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   let bookingId: string
+  let token: string
   try {
     const body = await req.json()
     bookingId = String(body.bookingId ?? '')
+    token = String(body.token ?? '')
   } catch {
-    return json({ error: 'Body must be JSON: { bookingId }' }, 400, cors)
+    return json({ error: 'Body must be JSON: { bookingId, token }' }, 400, cors)
   }
   if (!/^MBC-[A-Z0-9]{4}$/.test(bookingId)) {
     return json({ error: 'Invalid booking ref' }, 400, cors)
+  }
+  // Missing / malformed tokens collapse into the same 404 as wrong-token and
+  // not-found so probing can't distinguish them.
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
+    return json({ error: 'Booking not found' }, 404, cors)
   }
 
   const supabase = createClient(
@@ -44,11 +51,16 @@ Deno.serve(async (req) => {
   // they just submitted / BookingContext), not from this response.
   const { data: booking, error: bErr } = await supabase
     .from('bookings')
-    .select('id, service_id, slot_id, notes, created_at, status, paid')
+    .select('id, service_id, slot_id, notes, created_at, status, paid, access_token')
     .eq('id', bookingId)
     .maybeSingle()
   if (bErr) return json({ error: bErr.message }, 500, cors)
   if (!booking) return json({ error: 'Booking not found' }, 404, cors)
+  // Constant-time token compare: same 404 as not-found on mismatch so the
+  // caller can't tell "wrong token" from "no such ref".
+  if (!constantTimeEqual(token, booking.access_token ?? '')) {
+    return json({ error: 'Booking not found' }, 404, cors)
+  }
 
   const { data: slot, error: sErr } = await supabase
     .from('slots')
@@ -86,4 +98,17 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
+}
+
+// Constant-time string equality. Always walks max(len(a), len(b)) chars and
+// folds every difference into an accumulator, so the runtime is independent
+// of where the first mismatching character is. Avoids leaking token prefixes
+// via response-time side channels.
+function constantTimeEqual(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length)
+  let diff = a.length ^ b.length
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0)
+  }
+  return diff === 0
 }
