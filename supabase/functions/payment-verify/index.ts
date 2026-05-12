@@ -4,6 +4,7 @@
 // trust the client's claim of "paid" — we ask Tap.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { checkRateLimit } from '../_shared/rate-limit.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -31,6 +32,9 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+
+  const limited = await checkRateLimit(supabase, 'payment-verify', req)
+  if (limited) return limited
 
   // Fetch the booking and confirm the charge id we recorded matches the one
   // the redirect handed back. Stops attackers from reconciling someone else's

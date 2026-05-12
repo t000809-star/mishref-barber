@@ -3,6 +3,7 @@
 // doesn't block (the customer can't SELECT bookings directly).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { checkRateLimit } from '../_shared/rate-limit.ts'
 
 const SERVICES: Record<string, { name: string; durationMin: number; priceKwd: number }> = {
   'classic-cut':     { name: 'Classic Cut',     durationMin: 30, priceKwd: 5 },
@@ -35,6 +36,9 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+
+  const limited = await checkRateLimit(supabase, 'confirm-booking', req)
+  if (limited) return limited
 
   // Note: customer_name and phone are intentionally NOT selected or returned.
   // This endpoint is anon-callable and the booking ref is a short
