@@ -183,7 +183,17 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         status: 'pending',
         access_token: generateAccessToken(),
       }
-      const { error } = await supabase.from('bookings').insert(row)
+      let { error } = await supabase.from('bookings').insert(row)
+      // Pre-migration fallback: if 0012 hasn't been applied yet, the column
+      // doesn't exist in the schema cache. Retry without access_token. The
+      // generated token still lives in localStorage + the URL, so the
+      // /my-bookings flow keeps working until the migration lands.
+      if (error?.code === 'PGRST204' && /access_token/i.test(error.message ?? '')) {
+        const { access_token: _drop, ...rowWithoutToken } = row
+        void _drop
+        const retry = await supabase.from('bookings').insert(rowWithoutToken)
+        error = retry.error
+      }
       if (error) throw error
       const { error: slotErr } = await supabase
         .from('slots')
