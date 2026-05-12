@@ -28,6 +28,12 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await userClient.auth.getUser()
   if (userErr || !userData.user) return json({ error: 'Unauthorized' }, 401)
 
+  const adminEmail = Deno.env.get('ADMIN_EMAIL')
+  if (!adminEmail) return json({ error: 'Server misconfigured' }, 500)
+  if (userData.user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
+    return json({ error: 'Forbidden' }, 403)
+  }
+
   let bookingId: string
   let amount: number | null
   let reason: string | null

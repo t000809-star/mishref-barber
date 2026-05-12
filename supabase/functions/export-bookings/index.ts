@@ -27,6 +27,12 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await userClient.auth.getUser()
   if (userErr || !userData.user) return json({ error: 'Unauthorized' }, 401)
 
+  const adminEmail = Deno.env.get('ADMIN_EMAIL')
+  if (!adminEmail) return json({ error: 'Server misconfigured' }, 500)
+  if (userData.user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
+    return json({ error: 'Forbidden' }, 403)
+  }
+
   // Service role for the actual work — read all bookings, write to storage.
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
