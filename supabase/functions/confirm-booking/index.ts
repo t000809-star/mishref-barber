@@ -36,9 +36,15 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
+  // Note: customer_name and phone are intentionally NOT selected or returned.
+  // This endpoint is anon-callable and the booking ref is a short
+  // alphanumeric (~1M keyspace), so returning PII here would let anyone
+  // enumerate refs and scrape the customer directory. The confirmation page
+  // reads the customer's own name/phone from local React state (the form
+  // they just submitted / BookingContext), not from this response.
   const { data: booking, error: bErr } = await supabase
     .from('bookings')
-    .select('id, customer_name, phone, service_id, slot_id, notes, created_at, status, paid')
+    .select('id, service_id, slot_id, notes, created_at, status, paid')
     .eq('id', bookingId)
     .maybeSingle()
   if (bErr) return json({ error: bErr.message }, 500)
@@ -54,7 +60,7 @@ Deno.serve(async (req) => {
   const service = SERVICES[booking.service_id]
 
   const message =
-    `Hi ${booking.customer_name.split(' ')[0]}, you're booked at Mishref Barber Co. ` +
+    `You're booked at Mishref Barber Co. ` +
     `for ${service?.name ?? booking.service_id} on ${slot?.date} at ${slot?.time}. ` +
     `Ref: ${booking.id}. See you then.`
 
@@ -64,8 +70,6 @@ Deno.serve(async (req) => {
     message,
     booking: {
       id: booking.id,
-      customer_name: booking.customer_name,
-      phone: booking.phone,
       service: service?.name ?? booking.service_id,
       duration_min: service?.durationMin ?? null,
       price_kwd: service?.priceKwd ?? null,

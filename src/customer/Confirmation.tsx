@@ -2,15 +2,22 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatLongDate, formatTime } from '../lib/format'
+import { useBooking } from '../store/BookingContext'
 
+// The confirm-booking edge function intentionally omits customer_name and
+// phone — those would let an anon caller enumerate the short booking-ref
+// keyspace and scrape the customer directory. We read the customer's own
+// name/phone from local React state (BookingContext), populated when the
+// booking was just created in this browser session. If a user deep-links
+// back to /confirmed/:id later (fresh page load, RLS hides bookings from
+// anon), localBooking will be undefined — we just hide the Name row and
+// drop the phone reference rather than displaying someone else's data.
 type Receipt = {
   ok: true
   ref: string
   message: string
   booking: {
     id: string
-    customer_name: string
-    phone: string
     service: string
     duration_min: number | null
     price_kwd: number | null
@@ -24,6 +31,8 @@ type Receipt = {
 
 export default function Confirmation() {
   const { id } = useParams()
+  const { bookings } = useBooking()
+  const localBooking = bookings.find(b => b.id === id)
   const [data, setData] = useState<Receipt | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,7 +75,11 @@ export default function Confirmation() {
       <div className="text-center">
         <div className="mx-auto h-14 w-14 rounded-full bg-brand text-cream flex items-center justify-center text-2xl">✓</div>
         <h1 className="font-display text-3xl text-brand-dark mt-4">You're booked.</h1>
-        <p className="text-muted text-sm mt-1">We'll text {b.phone} if anything changes.</p>
+        <p className="text-muted text-sm mt-1">
+          {localBooking?.phone
+            ? `We'll text ${localBooking.phone} if anything changes.`
+            : `We'll text you if anything changes.`}
+        </p>
       </div>
 
       <div className="mt-6 rounded-2xl bg-white border border-sand p-5 shadow-card">
@@ -79,7 +92,7 @@ export default function Confirmation() {
         {b.date && b.time && <Row k="When" v={`${formatLongDate(b.date)} · ${formatTime(b.time)}`} />}
         {b.duration_min != null && <Row k="Duration" v={`${b.duration_min} min`} />}
         {b.price_kwd != null && <Row k="Price" v={`${b.price_kwd} KWD (pay in chair)`} />}
-        <Row k="Name" v={b.customer_name} />
+        {localBooking?.customerName && <Row k="Name" v={localBooking.customerName} />}
         {b.notes && <Row k="Notes" v={b.notes} />}
       </div>
 
