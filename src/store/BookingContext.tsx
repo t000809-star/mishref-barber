@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Booking, BookingStatus, Slot, SlotStatus } from '../types'
 import { supabase, type Db } from '../lib/supabase'
 import { isoForOffset } from '../data/seedSlots'
+import { addMyBooking } from '../lib/myBookings'
 
 type Ctx = {
   loading: boolean
@@ -38,6 +39,15 @@ const makeRef = () => {
   return `MBC-${r}`
 }
 
+// 24 random bytes -> 32-char URL-safe base64. Matches the edge function's
+// /^[A-Za-z0-9_-]{20,64}$/ allow-regex and stays well clear of URL escaping.
+const generateAccessToken = () => {
+  const bytes = new Uint8Array(24)
+  crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
 const slotFromRow = (row: Db['slots']): Slot => ({
   id: row.id,
   date: row.date,
@@ -56,6 +66,7 @@ const bookingFromRow = (row: Db['bookings']): Booking => ({
   status: row.status,
   paid: row.paid ?? false,
   tapChargeId: row.tap_charge_id ?? undefined,
+  accessToken: row.access_token,
 })
 
 async function ensureSlotsForNextDays(days: number) {
@@ -170,6 +181,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         notes: input.notes?.trim() || null,
         created_at: new Date().toISOString(),
         status: 'pending',
+        access_token: generateAccessToken(),
       }
       const { error } = await supabase.from('bookings').insert(row)
       if (error) throw error
@@ -179,6 +191,16 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         .eq('id', input.slotId)
       if (slotErr) throw slotErr
       const booking = bookingFromRow(row)
+      // Stash this booking on the device so the customer can come back to
+      // /confirmed/:id later (without the ?t= query string) and still
+      // authenticate to confirm-booking. Best-effort; storage failures are
+      // swallowed by addMyBooking.
+      addMyBooking({
+        id: booking.id,
+        ref: booking.id,
+        token: booking.accessToken,
+        savedAt: booking.createdAt,
+      })
       setBookings(b => [booking, ...b])
       setSlots(ss => ss.map(s => s.id === input.slotId ? { ...s, status: 'booked' } : s))
       return booking

@@ -47,7 +47,9 @@ export default function BookingForm() {
     setSubmitting(true)
     try {
       const b = await createBooking({ slotId, serviceId, customerName: name, phone, notes })
-      nav(`/confirmed/${b.id}`, { replace: true })
+      // Carry the token in the URL so refresh / share / bookmark all keep
+      // working — confirm-booking will reject the call without it.
+      nav(`/confirmed/${b.id}?t=${encodeURIComponent(b.accessToken)}`, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
       setSubmitting(false)

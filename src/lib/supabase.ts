@@ -29,5 +29,6 @@ export type Db = {
     status: 'pending' | 'done' | 'cancelled'
     paid?: boolean
     tap_charge_id?: string | null
+    access_token: string
   }
 }

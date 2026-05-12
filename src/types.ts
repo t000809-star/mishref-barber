@@ -28,4 +28,5 @@ export type Booking = {
   status: BookingStatus
   paid: boolean
   tapChargeId?: string
+  accessToken: string // opaque random per-booking token; gates customer reopens
 }

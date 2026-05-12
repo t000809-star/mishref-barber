@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatLongDate, formatTime } from '../lib/format'
 import { useBooking } from '../store/BookingContext'
+import { findTokenForBooking } from '../lib/myBookings'
 
 // The confirm-booking edge function intentionally omits customer_name and
 // phone — those would let an anon caller enumerate the short booking-ref
@@ -31,8 +32,18 @@ type Receipt = {
 
 export default function Confirmation() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const { bookings } = useBooking()
   const localBooking = bookings.find(b => b.id === id)
+  // Prefer the token in the URL (set by BookingForm right after creation,
+  // and what a refresh / share / bookmark will preserve). Fall back to the
+  // device-local stash so a customer who somehow lands here with a bare URL
+  // still gets in. If neither is present, we render an explanatory message
+  // below instead of hitting the edge function — it would just 404.
+  const token = useMemo(() => {
+    if (!id) return null
+    return searchParams.get('t') || findTokenForBooking(id) || null
+  }, [id, searchParams])
   const [data, setData] = useState<Receipt | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,9 +57,15 @@ export default function Confirmation() {
       setLoading(false)
       return
     }
+    if (!token) {
+      // No token available anywhere on this device — don't bother calling
+      // the edge function. We surface a clearer message than a silent 404.
+      setLoading(false)
+      return
+    }
     ;(async () => {
       const { data, error } = await supabase.functions.invoke<Receipt>('confirm-booking', {
-        body: { bookingId: id },
+        body: { bookingId: id, token },
       })
       if (cancelled) return
       if (error) setError(error.message)
@@ -57,9 +74,17 @@ export default function Confirmation() {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [id])
+  }, [id, token])
 
   if (loading) return <p className="pt-10 text-sm text-muted">Confirming your booking…</p>
+  if (!token) {
+    return (
+      <div className="pt-10 text-center">
+        <p>We can't find your booking from this device — open it from the original link.</p>
+        <Link to="/" className="underline mt-3 inline-block">Back to start</Link>
+      </div>
+    )
+  }
   if (error || !data) {
     return (
       <div className="pt-10 text-center">
