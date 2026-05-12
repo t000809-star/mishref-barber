@@ -58,6 +58,20 @@ Deno.serve(async (req) => {
   const status = String(tapJson.status ?? '')
   const captured = status === 'CAPTURED'
 
+  // Idempotency: if this exact charge already captured and reconciled, return
+  // success without re-writing bookings or appending another payments row.
+  // Refreshing /payment/return is the common trigger. The tap_charge_id match
+  // is enforced above (line 45-47), so we know the charge belongs here.
+  if (captured && booking.paid && booking.tap_charge_id === chargeId) {
+    return json({
+      ok: true,
+      bookingId,
+      chargeId,
+      status,
+      paid: true,
+    })
+  }
+
   if (captured && !booking.paid) {
     const { error: upErr } = await supabase
       .from('bookings')
