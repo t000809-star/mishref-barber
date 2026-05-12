@@ -74,6 +74,7 @@ export default function BookingForm() {
             onChange={e => setName(e.target.value)}
             placeholder="Khalid Al-Mutairi"
             autoComplete="name"
+            maxLength={80}
             className="w-full rounded-xl border border-sand bg-white px-4 py-3 text-base outline-none focus:border-brand"
           />
         </Field>
@@ -84,6 +85,7 @@ export default function BookingForm() {
             placeholder="+965 5000 0000"
             inputMode="tel"
             autoComplete="tel"
+            maxLength={20}
             className="w-full rounded-xl border border-sand bg-white px-4 py-3 text-base outline-none focus:border-brand"
           />
         </Field>
@@ -93,6 +95,7 @@ export default function BookingForm() {
             onChange={e => setNotes(e.target.value)}
             placeholder="Skin fade, leave the top long."
             rows={3}
+            maxLength={500}
             className="w-full rounded-xl border border-sand bg-white px-4 py-3 text-base outline-none focus:border-brand resize-none"
           />
         </Field>
