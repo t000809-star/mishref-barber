@@ -17,9 +17,11 @@ dist-ssr
 .env.*
 !.env.example
 
-# Local DB snapshot (contains customer data)
+# Local DB snapshots (contain customer data) — per-env outputs from db:dump:* / db:customers:*
 db-snapshot.md
+db-snapshot.*.md
 customers.csv
+customers.*.csv
 
 # Supabase CLI scratch
 supabase/.temp

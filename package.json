@@ -8,8 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:dump": "node scripts/dump-db.mjs",
-    "db:customers": "node scripts/export-customers.mjs"
+    "db:dump:dev": "node scripts/dump-db.mjs --env=development",
+    "db:dump:prod": "node scripts/dump-db.mjs --env=production",
+    "db:customers:dev": "node scripts/export-customers.mjs --env=development",
+    "db:customers:prod": "node scripts/export-customers.mjs --env=production"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",

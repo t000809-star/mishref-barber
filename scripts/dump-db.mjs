@@ -1,33 +1,48 @@
 #!/usr/bin/env node
-// Reads everything from Supabase and writes a human-readable snapshot.
-// Run with: npm run db:dump
-// Output: db-snapshot.md (gitignored)
+// Reads everything from one Supabase project and writes a human-readable
+// snapshot. Refuses to run without an explicit --env=development|production
+// so a `db:dump` muscle-memory invocation can never silently hit prod.
+//
+// Run with:  npm run db:dump:dev   OR   npm run db:dump:prod
+// Output:    db-snapshot.<env>.md  (gitignored)
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 
-function loadEnv() {
-  const env = {}
-  try {
-    const text = readFileSync(new URL('../.env', import.meta.url), 'utf8')
-    for (const line of text.split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-      if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
-    }
-  } catch {
-    // fall through to process.env
-  }
-  return {
-    url: env.VITE_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL,
-    key: env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-  }
-}
-
-const { url, key } = loadEnv()
-if (!url || !key) {
-  console.error('Missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY (set them in .env).')
+const flag = process.argv.find(a => a.startsWith('--env='))?.split('=')[1]
+if (flag !== 'development' && flag !== 'production') {
+  console.error('Pass --env=development or --env=production.')
+  console.error('Refusing to guess which Supabase project to read from.')
   process.exit(1)
 }
+
+const envFile = flag === 'production' ? '.env.production.local' : '.env.development.local'
+
+function loadEnv() {
+  let text
+  try {
+    text = readFileSync(new URL(`../${envFile}`, import.meta.url), 'utf8')
+  } catch {
+    console.error(`Missing ${envFile}. Create it with VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.`)
+    process.exit(1)
+  }
+  const env = {}
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+    if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  }
+  return env
+}
+
+const env = loadEnv()
+const url = env.VITE_SUPABASE_URL
+const key = env.VITE_SUPABASE_PUBLISHABLE_KEY
+if (!url || !key) {
+  console.error(`Missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY in ${envFile}.`)
+  process.exit(1)
+}
+
+console.log(`Dumping ${flag} project: ${url}`)
 const supabase = createClient(url, key)
 
 async function fetchAll(table, order) {
@@ -62,7 +77,7 @@ const slotCounts = slots.reduce((acc, s) => ((acc[s.status] = (acc[s.status] ?? 
 const bookingCounts = bookings.reduce((acc, b) => ((acc[b.status] = (acc[b.status] ?? 0) + 1), acc), {})
 
 const out = []
-out.push(`# Database snapshot`)
+out.push(`# Database snapshot (${flag})`)
 out.push(``)
 out.push(`Generated: ${new Date().toISOString()}`)
 out.push(`Project:   ${url}`)
@@ -101,5 +116,6 @@ for (const date of Object.keys(byDate).sort()) {
 }
 out.push(``)
 
-writeFileSync(new URL('../db-snapshot.md', import.meta.url), out.join('\n'))
-console.log(`Wrote db-snapshot.md  (${services.length} services, ${slots.length} slots, ${bookings.length} bookings)`)
+const outFile = `db-snapshot.${flag}.md`
+writeFileSync(new URL(`../${outFile}`, import.meta.url), out.join('\n'))
+console.log(`Wrote ${outFile}  (${services.length} services, ${slots.length} slots, ${bookings.length} bookings)`)
